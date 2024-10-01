@@ -1,0 +1,5 @@
+streamlit
+openai
+google-cloud-vision
+langchain
+chromadb
