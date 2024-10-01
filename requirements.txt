@@ -3,3 +3,4 @@ openai
 google-cloud-vision
 langchain
 chromadb
+-U langchain-community
