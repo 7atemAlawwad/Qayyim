@@ -20,7 +20,7 @@ openai.api_key = st.secrets["OPENAI_API_KEY"]
 
 # Set up Google Cloud credentials
 # Load the credentials from secrets
-google_credentials_json = st.secrets["GOOGLE_CREDENTIALS"]
+google_credentials_json = st.secrets["GOOGLE_APPLICATION_CREDENTIALS"]
 
 # Save the credentials to a temporary file
 with open("/tmp/google-credentials.json", "w") as f:
