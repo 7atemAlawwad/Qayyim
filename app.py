@@ -18,18 +18,17 @@ from langchain.text_splitter import RecursiveCharacterTextSplitter
 # Set up API keys (ensure they are stored in Streamlit's secrets)
 openai.api_key = st.secrets["OPENAI_API_KEY"]
 
-# Set up Google Cloud credentials
-# Load the credentials from secrets
-google_credentials_json = st.secrets["GOOGLE_APPLICATION_CREDENTIALS"]
+# Load credentials from Streamlit secrets
+google_creds = st.secrets["GOOGLE_APPLICATION_CREDENTIALS"]
 
 # Save the credentials to a temporary file
 with open("/tmp/google-credentials.json", "w") as f:
-    f.write(google_credentials_json)
+    f.write(google_creds)
 
-# Set the environment variable to point to the temporary credentials file
+# Set the environment variable to the temporary file
 os.environ["GOOGLE_APPLICATION_CREDENTIALS"] = "/tmp/google-credentials.json"
 
-# Now you can use Google Cloud libraries that require the credentials
+# Now, use the Google Vision API client as usual
 from google.cloud import vision
 
 client = vision.ImageAnnotatorClient()
