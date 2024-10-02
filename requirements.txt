@@ -5,3 +5,8 @@ langchain
 chromadb
 langchain-community
 google-generativeai
+langchain-chroma
+Pillow
+IPython
+pathlib
+textwrap
