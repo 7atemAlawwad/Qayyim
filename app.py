@@ -1,3 +1,5 @@
+from tkinter import Image
+import requests
 import google.generativeai as genai
 import pathlib
 import textwrap
@@ -6,7 +8,6 @@ from google.colab import userdata
 import PIL.Image
 import os
 from google.cloud import vision
-import io
 import re
 from langchain_community.document_loaders import PyPDFLoader
 from langchain.llms import OpenAI
@@ -21,8 +22,6 @@ from langchain_core.prompts import ChatPromptTemplate
 import openai
 from io import BytesIO
 import streamlit as st
-from tkinter import Image
-
 
 openai.api_key = st.secrets["OPENAI_API_KEY"]
 google_creds = st.secrets["GOOGLE_APPLICATION_CREDENTIALS"]
@@ -35,6 +34,25 @@ os.environ["GOOGLE_APPLICATION_CREDENTIALS"] = "/tmp/google-credentials.json"
 
 # Initialize Google Cloud Vision Client
 client = vision.ImageAnnotatorClient()
+
+# Streamlit app UI
+st.title("تقرير الحادث المروري")
+
+st.write("الرجاء تحميل الصور وإدخال وصف الحادث.")
+
+# Upload accident image
+accident_image_file = st.file_uploader("تحميل صورة الحادث", type=["jpg", "jpeg", "png"])
+
+# Upload vehicle registration images
+vehicle_reg_image1_file = st.file_uploader("تحميل استمارة تسجيل السيارة الأولى", type=["jpg", "jpeg", "png"])
+vehicle_reg_image2_file = st.file_uploader("تحميل استمارة تسجيل السيارة الثانية", type=["jpg", "jpeg", "png"])
+
+# Upload PDF with traffic laws
+traffic_law_pdf = st.file_uploader("تحميل ملف قوانين المرور (PDF)", type="pdf")
+
+# Input descriptions for each party
+FirstPartyDescription = st.text_input("وصف الحادث من الطرف الأول:")
+SecondPartyDescription = st.text_input("وصف الحادث من الطرف الثاني:")
 
 model = genai.GenerativeModel('gemini-1.5-pro-latest')
 if accident_image_file is not None:
@@ -249,7 +267,10 @@ def format_vehicle_registration_text(detected_text):
     return "\n".join(output_lines)
 
 # Streamlit UI for uploading images
+st.write("Upload two vehicle registration images to extract details.")
 
+vehicle_reg_image1 = st.file_uploader("Upload first vehicle registration", type=["jpg", "jpeg", "png"])
+vehicle_reg_image2 = st.file_uploader("Upload second vehicle registration", type=["jpg", "jpeg", "png"])
 
 if vehicle_reg_image1 and vehicle_reg_image2:
     # Detect and format text for both images
@@ -283,8 +304,8 @@ def download_pdf_from_github(pdf_url):
 
 # Load the PDF and process it with LangChain
 @st.cache_data
-def load_traffic_laws_pdf(pdf_path):
-    loader = PyPDFLoader(pdf_path)
+def load_traffic_laws_pdf(pdf_url):
+    loader = PyPDFLoader(pdf_url)
     docs = loader.load()
     
     # Split documents
@@ -297,7 +318,7 @@ def load_traffic_laws_pdf(pdf_path):
     retriever = vectorstore.as_retriever()
     return retriever
 
-retriever = load_traffic_laws_pdf(temp_pdf_path)
+retriever = load_traffic_laws_pdf(pdf_url)
 
 # Setup GPT model
 llm = OpenAI(model="gpt-4")
@@ -374,8 +395,8 @@ if st.button("توليد تقرير الحادث"):
                     FirstPartyDescription,
                     SecondPartyDescription,
                     AccidentDescription,
-                    VehicleRegistration1,
-                    VehicleRegistration2,
+                    vehicle_reg_image1,
+                    vehicle_reg_image2,
                     retriever
                 )
                 # Display the accident report
@@ -387,19 +408,4 @@ if st.button("توليد تقرير الحادث"):
         st.error("الرجاء تحميل جميع الصور وملف قوانين المرور.")
 
 
-# Streamlit app UI
-st.title("تقرير الحادث المروري")
 
-st.write("الرجاء تحميل الصور وإدخال وصف الحادث.")
-
-# Upload accident image
-accident_image_file = st.file_uploader("تحميل صورة الحادث", type=["jpg", "jpeg", "png"])
-
-
-# Upload vehicle registration images
-vehicle_reg_image1 = st.file_uploader("تحميل استمارة تسجيل السيارة الأولى", type=["jpg", "jpeg", "png"])
-vehicle_reg_image2 = st.file_uploader("تحميل استمارة تسجيل السيارة الثانية", type=["jpg", "jpeg", "png"])
-
-# Input descriptions for each party
-FirstPartyDescription = st.text_input("وصف الحادث من الطرف الأول:")
-SecondPartyDescription = st.text_input("وصف الحادث من الطرف الثاني:")
