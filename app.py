@@ -291,7 +291,7 @@ else:
 
 
 # URL of the PDF on GitHub
-pdf_url = 'https://raw.githubusercontent.com/your_username/your_repo/main/path_to_your_pdf_file.pdf'
+pdf_url = 'https://github.com/7atemAlawwad/Qayyim/blob/main/Traffic_Laws.pdf'
 
 def download_pdf_from_github(pdf_url):
     response = requests.get(pdf_url)
