@@ -10,3 +10,5 @@ Pillow
 IPython
 pathlib
 textwrap
+PyPDF2
+requests
