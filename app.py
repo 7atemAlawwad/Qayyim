@@ -52,7 +52,7 @@ traffic_law_pdf = st.file_uploader("تحميل ملف قوانين المرور 
 FirstPartyDescription = st.text_input("وصف الحادث من الطرف الأول:")
 SecondPartyDescription = st.text_input("وصف الحادث من الطرف الثاني:")
 
-
+model = genai.GenerativeModel('gemini-1.5-pro-latest')
 if accident_image_file is not None:
     # Load image with PIL
     img = Image.open(accident_image_file)
@@ -73,7 +73,6 @@ if accident_image_file is not None:
     }
 
     # Generate the response using the Gemini model
-    model = genai.GenerativeModel('gemini-1.5-pro-latest')
     response = model.generate_content([prompt_arabic, img], generation_config=generation_config)
     AccidentDescription = response.text
 
@@ -301,44 +300,44 @@ def download_pdf_from_github(pdf_url):
         st.error("Failed to download PDF from GitHub.")
         return None
 
-    # Load the PDF and process it with LangChain
-    @st.cache_data
-    def load_traffic_laws_pdf(pdf_path):
-        loader = PyPDFLoader(pdf_path)
-        docs = loader.load()
-        
-        # Split documents
-        text_splitter = TextSplitter(chunk_size=1000, chunk_overlap=100)
-        splits = text_splitter.split_documents(docs)
-        
-        # Embeddings
-        embeddings = OpenAIEmbeddings()
-        vectorstore = Chroma.from_documents(documents=splits, embedding=embeddings)
-        retriever = vectorstore.as_retriever()
-        return retriever
+# Load the PDF and process it with LangChain
+@st.cache_data
+def load_traffic_laws_pdf(pdf_path):
+    loader = PyPDFLoader(pdf_path)
+    docs = loader.load()
+    
+    # Split documents
+    text_splitter = TextSplitter(chunk_size=1000, chunk_overlap=100)
+    splits = text_splitter.split_documents(docs)
+    
+    # Embeddings
+    embeddings = OpenAIEmbeddings()
+    vectorstore = Chroma.from_documents(documents=splits, embedding=embeddings)
+    retriever = vectorstore.as_retriever()
+    return retriever
 
-    retriever = load_traffic_laws_pdf(temp_pdf_path)
+retriever = load_traffic_laws_pdf(temp_pdf_path)
 
-    # Setup GPT model
-    llm = OpenAI(model="gpt-4")
+# Setup GPT model
+llm = OpenAI(model="gpt-4")
 
-    # Define the system prompt for RAG processing
-    system_prompt = (
-        "You are an assistant for summarizing and answering questions about traffic laws. "
-        "You are expected to analyze and assess fault in traffic accidents based on the provided information. "
-        "If the input doesn't relate to the document or you can't determine the answer, respond with 'I don't have any idea'."
-    )
+# Define the system prompt for RAG processing
+system_prompt = (
+    "You are an assistant for summarizing and answering questions about traffic laws. "
+    "You are expected to analyze and assess fault in traffic accidents based on the provided information. "
+    "If the input doesn't relate to the document or you can't determine the answer, respond with 'I don't have any idea'."
+)
 
-    prompt_template = ChatPromptTemplate.from_messages(
-        [
-            ("system", system_prompt),
-            ("human", "{input}"),
-        ]
-    )
+prompt_template = ChatPromptTemplate.from_messages(
+    [
+        ("system", system_prompt),
+        ("human", "{input}"),
+    ]
+)
 
-    # Create the RAG chain
-    question_answer_chain = create_stuff_documents_chain(llm, prompt_template)
-    rag_chain = create_retrieval_chain(retriever, question_answer_chain)
+# Create the RAG chain
+question_answer_chain = create_stuff_documents_chain(llm, prompt_template)
+rag_chain = create_retrieval_chain(retriever, question_answer_chain)
 
 # Function to generate the accident report
 def generate_accident_report_with_fault(FirstPartyDescription, SecondPartyDescription, AccidentDescription, VehicleRegistration, rag_chain):
