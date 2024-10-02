@@ -4,3 +4,4 @@ google-cloud-vision
 langchain
 chromadb
 langchain-community
+google-generativeai
