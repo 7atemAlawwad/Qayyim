@@ -19,7 +19,7 @@ from langchain.chains import create_retrieval_chain
 from langchain.chains.combine_documents import create_stuff_documents_chain
 from langchain_core.prompts import ChatPromptTemplate
 import openai
-
+from io import BytesIO
 
 openai.api_key = st.secrets["OPENAI_API_KEY"]
 google_creds = st.secrets["GOOGLE_APPLICATION_CREDENTIALS"]
@@ -290,6 +290,16 @@ else:
     st.write("Please upload both vehicle registration images to proceed.")
 
 
+# URL of the PDF on GitHub
+pdf_url = 'https://raw.githubusercontent.com/your_username/your_repo/main/path_to_your_pdf_file.pdf'
+
+def download_pdf_from_github(pdf_url):
+    response = requests.get(pdf_url)
+    if response.status_code == 200:
+        return BytesIO(response.content)  # Returns file-like object
+    else:
+        st.error("Failed to download PDF from GitHub.")
+        return None
 
     # Load the PDF and process it with LangChain
     @st.cache_data
