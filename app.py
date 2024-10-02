@@ -21,6 +21,8 @@ from langchain_core.prompts import ChatPromptTemplate
 import openai
 from io import BytesIO
 import streamlit as st
+from tkinter import Image
+
 
 openai.api_key = st.secrets["OPENAI_API_KEY"]
 google_creds = st.secrets["GOOGLE_APPLICATION_CREDENTIALS"]
