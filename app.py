@@ -54,7 +54,7 @@ traffic_law_pdf = st.file_uploader("تحميل ملف قوانين المرور 
 FirstPartyDescription = st.text_input("وصف الحادث من الطرف الأول:")
 SecondPartyDescription = st.text_input("وصف الحادث من الطرف الثاني:")
 
-model = genai.GenerativeModel('gemini-1.5-pro-latest')
+model = genai.model('gemini-1.5-pro-latest')
 if accident_image_file is not None:
     # Load image with PIL
     img = Image.open(accident_image_file)
@@ -86,36 +86,11 @@ if accident_image_file is not None:
     else:
         st.write("لم يتم العثور على حادث في الصورة")
 
-def detect_text(image_file):
-    """Detects text in the uploaded image file."""
-    content = image_file.read()
-    image = vision.Image(content=content)
-    response = client.text_detection(image=image)
-    texts = response.text_annotations
 
-    if response.error.message:
-        raise Exception(f'{response.error.message}')
-
-    full_text = texts[0].description if texts else ''
-    return full_text
-
-# Set up Google Vision credentials
-st.title("Vehicle Registration Extraction")
-
-# Set up Google Cloud credentials (from Streamlit secrets)
-google_creds = st.secrets["GOOGLE_APPLICATION_CREDENTIALS"]
-
-# Save the credentials to a temporary file for the Vision API
-with open("/tmp/google-credentials.json", "w") as f:
-    f.write(google_creds)
-os.environ["GOOGLE_APPLICATION_CREDENTIALS"] = "/tmp/google-credentials.json"
-
-client = vision.ImageAnnotatorClient()
 
 # Function to detect text using Google Vision API
 def detect_text(image_file):
-    """Detects text in the uploaded image file."""
-    content = image_file.read()
+    content = image_file.getvalue()
     image = vision.Image(content=content)
     response = client.text_detection(image=image)
     texts = response.text_annotations
@@ -125,6 +100,7 @@ def detect_text(image_file):
 
     full_text = texts[0].description if texts else ''
     return full_text
+
 
 # Functions to extract specific fields from the detected text
 def create_label_indices(lines):
@@ -292,7 +268,7 @@ else:
 
 
 # URL of the PDF on GitHub
-pdf_url = 'https://github.com/7atemAlawwad/Qayyim/blob/main/Traffic_Laws.pdf'
+pdf_url = 'https://raw.githubusercontent.com/7atemAlawwad/Qayyim/main/Traffic_Laws.pdf'
 
 def download_pdf_from_github(pdf_url):
     response = requests.get(pdf_url)
@@ -387,7 +363,7 @@ def generate_accident_report_with_fault(FirstPartyDescription, SecondPartyDescri
 
 # Button to generate accident report
 if st.button("توليد تقرير الحادث"):
-    if accident_image_file and vehicle_reg_image1_file and vehicle_reg_image2_file and traffic_law_pdf:
+    if accident_image_file and vehicle_reg_image1 and vehicle_reg_image2:
         # Call RAG-based accident report generation
         with st.spinner("Generating accident report..."):
             try:
