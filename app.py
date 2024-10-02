@@ -33,25 +33,6 @@ os.environ["GOOGLE_APPLICATION_CREDENTIALS"] = "/tmp/google-credentials.json"
 # Initialize Google Cloud Vision Client
 client = vision.ImageAnnotatorClient()
 
-# Streamlit app UI
-st.title("تقرير الحادث المروري")
-
-st.write("الرجاء تحميل الصور وإدخال وصف الحادث.")
-
-# Upload accident image
-accident_image_file = st.file_uploader("تحميل صورة الحادث", type=["jpg", "jpeg", "png"])
-
-# Upload vehicle registration images
-vehicle_reg_image1_file = st.file_uploader("تحميل استمارة تسجيل السيارة الأولى", type=["jpg", "jpeg", "png"])
-vehicle_reg_image2_file = st.file_uploader("تحميل استمارة تسجيل السيارة الثانية", type=["jpg", "jpeg", "png"])
-
-# Upload PDF with traffic laws
-traffic_law_pdf = st.file_uploader("تحميل ملف قوانين المرور (PDF)", type="pdf")
-
-# Input descriptions for each party
-FirstPartyDescription = st.text_input("وصف الحادث من الطرف الأول:")
-SecondPartyDescription = st.text_input("وصف الحادث من الطرف الثاني:")
-
 model = genai.GenerativeModel('gemini-1.5-pro-latest')
 if accident_image_file is not None:
     # Load image with PIL
@@ -265,10 +246,7 @@ def format_vehicle_registration_text(detected_text):
     return "\n".join(output_lines)
 
 # Streamlit UI for uploading images
-st.write("Upload two vehicle registration images to extract details.")
 
-vehicle_reg_image1 = st.file_uploader("Upload first vehicle registration", type=["jpg", "jpeg", "png"])
-vehicle_reg_image2 = st.file_uploader("Upload second vehicle registration", type=["jpg", "jpeg", "png"])
 
 if vehicle_reg_image1 and vehicle_reg_image2:
     # Detect and format text for both images
@@ -406,4 +384,19 @@ if st.button("توليد تقرير الحادث"):
         st.error("الرجاء تحميل جميع الصور وملف قوانين المرور.")
 
 
+# Streamlit app UI
+st.title("تقرير الحادث المروري")
 
+st.write("الرجاء تحميل الصور وإدخال وصف الحادث.")
+
+# Upload accident image
+accident_image_file = st.file_uploader("تحميل صورة الحادث", type=["jpg", "jpeg", "png"])
+
+
+# Upload vehicle registration images
+vehicle_reg_image1 = st.file_uploader("تحميل استمارة تسجيل السيارة الأولى", type=["jpg", "jpeg", "png"])
+vehicle_reg_image2 = st.file_uploader("تحميل استمارة تسجيل السيارة الثانية", type=["jpg", "jpeg", "png"])
+
+# Input descriptions for each party
+FirstPartyDescription = st.text_input("وصف الحادث من الطرف الأول:")
+SecondPartyDescription = st.text_input("وصف الحادث من الطرف الثاني:")
