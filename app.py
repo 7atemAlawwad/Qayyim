@@ -33,10 +33,6 @@ with open("/tmp/google-credentials.json", "w") as f:
     json.dump(json_content, f)
 os.environ["GOOGLE_APPLICATION_CREDENTIALS"] = "/tmp/google-credentials.json"
 
-# Save Google credentials to a temporary file for Vision API
-with open("/tmp/google-credentials.json", "w") as f:
-    f.write(google_creds)
-os.environ["GOOGLE_APPLICATION_CREDENTIALS"] = "/tmp/google-credentials.json"
 
 # Initialize Google Cloud Vision Client
 client = vision.ImageAnnotatorClient()
