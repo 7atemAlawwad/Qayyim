@@ -18,12 +18,20 @@ import openai
 from io import BytesIO
 import streamlit as st
 import pandas as pd
+import json
 
 
 # Set API keys
 openai.api_key = st.secrets["OPENAI_API_KEY"]
 google_creds = st.secrets["GOOGLE_APPLICATION_CREDENTIALS"]
 genai.configure(api_key=st.secrets["GOOGLE_GENERATIVE_AI_API_KEY"])
+
+
+# Save Google credentials to a temporary file for Vision API
+with open("/tmp/google-credentials.json", "w") as f:
+    json_content = json.loads(google_creds)
+    json.dump(json_content, f)
+os.environ["GOOGLE_APPLICATION_CREDENTIALS"] = "/tmp/google-credentials.json"
 
 # Save Google credentials to a temporary file for Vision API
 with open("/tmp/google-credentials.json", "w") as f:
