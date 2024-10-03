@@ -1,5 +1,4 @@
 requests
-google-generativeai
 Pillow
 google-cloud-vision
 langchain
@@ -7,3 +6,5 @@ chromadb
 openai
 streamlit
 pandas
+google-generativeai
+langchain-community
