@@ -1,5 +1,5 @@
 requests
-google-generativeai
+google-generative-ai
 ipython
 google-colab
 Pillow
