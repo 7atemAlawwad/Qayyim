@@ -1,5 +1,5 @@
 requests
-google-generative-ai
+google-generativeai
 Pillow
 google-cloud-vision
 langchain
