@@ -12,9 +12,8 @@ from langchain.chat_models import ChatOpenAI
 from langchain.vectorstores import Chroma
 from langchain.embeddings import OpenAIEmbeddings
 from langchain.text_splitter import RecursiveCharacterTextSplitter
-from langchain.chains import RetrievalQA
-from langchain.chains.combine_documents import StuffDocumentsChain
-from langchain.prompts.chat import ChatPromptTemplate
+from langchain.chains import ConversationalRetrievalChain, RetrievalQA
+from langchain.prompts import ChatPromptTemplate
 import openai
 from io import BytesIO
 import streamlit as st
@@ -273,7 +272,7 @@ def load_traffic_laws_csv(csv_url):
     splits = text_splitter.split_text(text_data)
     
     # Create documents from splits
-    from langchain.docstore.document import Document
+    from langchain.schema import Document
     docs = [Document(page_content=chunk) for chunk in splits]
     
     # Embeddings
@@ -304,14 +303,19 @@ else:
         ]
     )
 
-    # Create the RAG chain
-    question_answer_chain = StuffDocumentsChain(llm=llm, prompt=prompt_template)
-    rag_chain = RetrievalQA(combine_documents_chain=question_answer_chain, retriever=retriever)
+    # Create the RAG chain using ConversationalRetrievalChain
+    rag_chain = ConversationalRetrievalChain.from_llm(
+        llm=llm,
+        retriever=retriever,
+        condense_question_prompt=prompt_template,
+        return_source_documents=False
+    )
 
     # Function to generate the accident report
     def generate_accident_report_with_fault(FirstPartyDescription, SecondPartyDescription, AccidentDescription, VehicleRegistration1, VehicleRegistration2, retriever):
         # Retrieve relevant traffic laws or information using RAG
-        retrieved_context = rag_chain.run(AccidentDescription + FirstPartyDescription + SecondPartyDescription)
+        query = AccidentDescription + FirstPartyDescription + SecondPartyDescription
+        retrieved_context = rag_chain({'question': query})['answer']
 
         # Create the prompt dynamically by including the vehicle information and accident description
         prompt = (
