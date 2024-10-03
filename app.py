@@ -1,28 +1,26 @@
-from tkinter import Image
 import requests
 import google.generativeai as genai
 import pathlib
 import textwrap
-from IPython.display import display, Markdown
-from google.colab import userdata
 import PIL.Image
 import os
 from google.cloud import vision
 import re
-from langchain_community.document_loaders import PyPDFLoader
+from langchain.document_loaders import CSVLoader
 from langchain.llms import OpenAI
 from langchain.chat_models import ChatOpenAI
-from langchain_community.document_loaders import PyPDFLoader
-from langchain_chroma import Chroma
-from langchain.embeddings.openai import OpenAIEmbeddings
-from langchain.text_splitter import TextSplitter
-from langchain.chains import create_retrieval_chain
-from langchain.chains.combine_documents import create_stuff_documents_chain
-from langchain_core.prompts import ChatPromptTemplate
+from langchain.vectorstores import Chroma
+from langchain.embeddings import OpenAIEmbeddings
+from langchain.text_splitter import RecursiveCharacterTextSplitter
+from langchain.chains import RetrievalQA
+from langchain.chains.combine_documents import StuffDocumentsChain
+from langchain.prompts.chat import ChatPromptTemplate
 import openai
 from io import BytesIO
 import streamlit as st
+import pandas as pd
 
+# Set API keys
 openai.api_key = st.secrets["OPENAI_API_KEY"]
 google_creds = st.secrets["GOOGLE_APPLICATION_CREDENTIALS"]
 genai.configure(api_key=st.secrets["GOOGLE_GENERATIVE_AI_API_KEY"])
@@ -37,7 +35,6 @@ client = vision.ImageAnnotatorClient()
 
 # Streamlit app UI
 st.title("تقرير الحادث المروري")
-
 st.write("الرجاء تحميل الصور وإدخال وصف الحادث.")
 
 # Upload accident image
@@ -47,46 +44,41 @@ accident_image_file = st.file_uploader("تحميل صورة الحادث", type=
 vehicle_reg_image1_file = st.file_uploader("تحميل استمارة تسجيل السيارة الأولى", type=["jpg", "jpeg", "png"])
 vehicle_reg_image2_file = st.file_uploader("تحميل استمارة تسجيل السيارة الثانية", type=["jpg", "jpeg", "png"])
 
-# Upload PDF with traffic laws
-traffic_law_pdf = st.file_uploader("تحميل ملف قوانين المرور (PDF)", type="pdf")
-
 # Input descriptions for each party
 FirstPartyDescription = st.text_input("وصف الحادث من الطرف الأول:")
 SecondPartyDescription = st.text_input("وصف الحادث من الطرف الثاني:")
 
-model = genai.model('gemini-1.5-pro-latest')
+# Process accident image
 if accident_image_file is not None:
     # Load image with PIL
-    img = Image.open(accident_image_file)
+    img = PIL.Image.open(accident_image_file)
 
     # Display the uploaded image
-    st.image(img, caption="Uploaded Image", use_column_width=True)
+    st.image(img, caption="صورة الحادث", use_column_width=True)
 
     # Define the prompt
     prompt_arabic = """
-    انت محقق حوادث مروريه او شرطي مرور , سيتم تزيدك بصوره ان وجدت بها حادث قم بتحديد الطرف الاول على يسار الصوره و الطرف الثاني على يمين الصوره
-    واريد منك وصف للحادث وتحديد الاضرار ان وجدت فقط
-    وان لم يكن هناك حادث في الصوره قم بكتابة لم يتم العثور على حادث في الصوره
+    انت محقق حوادث مرورية أو شرطي مرور. سيتم تزويدك بصورة؛ إذا وجدت بها حادث، قم بتحديد الطرف الأول على يسار الصورة والطرف الثاني على يمين الصورة.
+    أريد منك وصفًا للحادث وتحديد الأضرار إن وجدت فقط.
+    وإن لم يكن هناك حادث في الصورة، قم بكتابة "لم يتم العثور على حادث في الصورة".
     """
 
-    # Set generation configuration
-    generation_config = {
-        'temperature': 0.2  # You can adjust temperature based on your needs
-    }
-
     # Generate the response using the Gemini model
-    response = model.generate_content([prompt_arabic, img], generation_config=generation_config)
-    AccidentDescription = response.text
+    # Note: Ensure that the model supports image input if applicable
+    response = genai.generate_text(
+        prompt=prompt_arabic,
+        max_tokens=500,
+        temperature=0.2
+    )
+    AccidentDescription = response.result
 
     # Check and display the accident description
     if AccidentDescription.strip() != "لم يتم العثور على حادث في الصورة":
-        st.write("Accident Description:")
+        st.write("وصف الحادث:")
         st.write(AccidentDescription)
-        st.write(".يرجى ملاحظة أن هذا الوصف يعتمد على الصورة فقط وقد لا يعكس بدقة تفاصيل الحادث ومن المهم جمع معلومات إضافية من اطراف الحادث لمعرفة تفاصيل الحادث بشكل دقيق")
+        st.write("يرجى ملاحظة أن هذا الوصف يعتمد على الصورة فقط وقد لا يعكس بدقة تفاصيل الحادث. من المهم جمع معلومات إضافية من أطراف الحادث لمعرفة تفاصيل الحادث بشكل دقيق.")
     else:
-        st.write("لم يتم العثور على حادث في الصورة")
-
-
+        st.write("لم يتم العثور على حادث في الصورة.")
 
 # Function to detect text using Google Vision API
 def detect_text(image_file):
@@ -101,14 +93,12 @@ def detect_text(image_file):
     full_text = texts[0].description if texts else ''
     return full_text
 
-
 # Functions to extract specific fields from the detected text
 def create_label_indices(lines):
     label_indices = {}
     label_set = set()
     for idx, line in enumerate(lines):
         line_clean = line.strip(':').strip()
-        # Map labels to their indices
         labels = [
             'المالك', 'هوية المالك', 'رقم الهوية', 'رقم الهيكل', 'رقم اللوحة',
             'ماركة المركبة', 'الماركة', 'الوزن', 'نوع التسجيل', 'طراز المركبة',
@@ -159,7 +149,6 @@ def extract_chassis_number(lines, label_indices):
                 chassis_number = lines[idx + 1].strip()
                 return f"رقم الهيكل: {chassis_number}"
         else:
-            # Fallback: look for a line with 17-character alphanumeric string
             for line in lines:
                 if re.match(r'^[A-HJ-NPR-Z0-9]{17}$', line):
                     return f"رقم الهيكل: {line.strip()}"
@@ -225,9 +214,7 @@ def extract_year_of_manufacture(lines, label_indices):
 # Main function to process and format the vehicle registration text
 def format_vehicle_registration_text(detected_text):
     lines = [line.strip() for line in detected_text.split('\n') if line.strip()]
-
     label_indices, label_set = create_label_indices(lines)
-
     output_lines = [
         extract_owner_name(lines, label_indices),
         extract_owner_id(lines, label_indices),
@@ -239,149 +226,158 @@ def format_vehicle_registration_text(detected_text):
         extract_vehicle_color(lines, label_indices),
         extract_year_of_manufacture(lines, label_indices)
     ]
-
     return "\n".join(output_lines)
 
-# Streamlit UI for uploading images
-st.write("Upload two vehicle registration images to extract details.")
-
-vehicle_reg_image1 = st.file_uploader("Upload first vehicle registration", type=["jpg", "jpeg", "png"])
-vehicle_reg_image2 = st.file_uploader("Upload second vehicle registration", type=["jpg", "jpeg", "png"])
-
-if vehicle_reg_image1 and vehicle_reg_image2:
+# Process vehicle registration images
+if vehicle_reg_image1_file and vehicle_reg_image2_file:
     # Detect and format text for both images
-    with st.spinner("Processing images..."):
-        detected_text1 = detect_text(vehicle_reg_image1)
+    with st.spinner("Processing vehicle registration images..."):
+        detected_text1 = detect_text(vehicle_reg_image1_file)
         formatted_text1 = format_vehicle_registration_text(detected_text1)
 
-        detected_text2 = detect_text(vehicle_reg_image2)
+        detected_text2 = detect_text(vehicle_reg_image2_file)
         formatted_text2 = format_vehicle_registration_text(detected_text2)
 
     # Display the formatted text for both vehicle registrations
-    st.write("### Vehicle Registration 1 Information:")
+    st.write("### معلومات تسجيل السيارة الأولى:")
     st.text(formatted_text1)
 
-    st.write("### Vehicle Registration 2 Information:")
+    st.write("### معلومات تسجيل السيارة الثانية:")
     st.text(formatted_text2)
 else:
-    st.write("Please upload both vehicle registration images to proceed.")
+    st.write("يرجى تحميل صور تسجيل المركبتين لاستخراج التفاصيل.")
 
+# URL of the CSV file on GitHub
+csv_url = 'https://raw.githubusercontent.com/7atemAlawwad/Qayyim/main/Traffic_Laws.csv'
 
-# URL of the PDF on GitHub
-pdf_url = 'https://raw.githubusercontent.com/7atemAlawwad/Qayyim/main/Traffic_Laws.pdf'
-
-def download_pdf_from_github(pdf_url):
-    response = requests.get(pdf_url)
+# Function to download CSV from GitHub
+def download_csv_from_github(csv_url):
+    response = requests.get(csv_url)
     if response.status_code == 200:
         return BytesIO(response.content)  # Returns file-like object
     else:
-        st.error("Failed to download PDF from GitHub.")
+        st.error("Failed to download CSV from GitHub.")
         return None
 
-# Load the PDF and process it with LangChain
+# Load the CSV file and process it with LangChain
 @st.cache_data
-def load_traffic_laws_pdf(pdf_url):
-    loader = PyPDFLoader(pdf_url)
-    docs = loader.load()
-    
+def load_traffic_laws_csv(csv_url):
+    csv_file = download_csv_from_github(csv_url)
+    if csv_file is None:
+        st.error("Could not download the CSV file.")
+        return None
+    df = pd.read_csv(csv_file)
+    text_data = df.to_csv(index=False)
     # Split documents
-    text_splitter = TextSplitter(chunk_size=1000, chunk_overlap=100)
-    splits = text_splitter.split_documents(docs)
+    text_splitter = RecursiveCharacterTextSplitter(chunk_size=1000, chunk_overlap=100)
+    splits = text_splitter.split_text(text_data)
+    
+    # Create documents from splits
+    from langchain.docstore.document import Document
+    docs = [Document(page_content=chunk) for chunk in splits]
     
     # Embeddings
     embeddings = OpenAIEmbeddings()
-    vectorstore = Chroma.from_documents(documents=splits, embedding=embeddings)
+    vectorstore = Chroma.from_documents(documents=docs, embedding=embeddings)
     retriever = vectorstore.as_retriever()
     return retriever
 
-retriever = load_traffic_laws_pdf(pdf_url)
+# Load retriever
+retriever = load_traffic_laws_csv(csv_url)
+if retriever is None:
+    st.error("Unable to load traffic laws data.")
+else:
+    # Setup GPT model
+    llm = OpenAI(model_name="gpt-4")
 
-# Setup GPT model
-llm = OpenAI(model="gpt-4")
-
-# Define the system prompt for RAG processing
-system_prompt = (
-    "You are an assistant for summarizing and answering questions about traffic laws. "
-    "You are expected to analyze and assess fault in traffic accidents based on the provided information. "
-    "If the input doesn't relate to the document or you can't determine the answer, respond with 'I don't have any idea'."
-)
-
-prompt_template = ChatPromptTemplate.from_messages(
-    [
-        ("system", system_prompt),
-        ("human", "{input}"),
-    ]
-)
-
-# Create the RAG chain
-question_answer_chain = create_stuff_documents_chain(llm, prompt_template)
-rag_chain = create_retrieval_chain(retriever, question_answer_chain)
-
-# Function to generate the accident report
-def generate_accident_report_with_fault(FirstPartyDescription, SecondPartyDescription, AccidentDescription, VehicleRegistration, rag_chain):
-    # Retrieve relevant traffic laws or information using RAG
-    retrieved_context = rag_chain.invoke({"input": AccidentDescription + FirstPartyDescription + SecondPartyDescription})
-
-    # Create the prompt dynamically by including the vehicle information and accident description
-    prompt = (
-        f"""
-        يوجد حادث مروري لسيارتين:
-        وصف الحادث بناءً على الصورة المقدمة: {AccidentDescription}
-
-        تسجيل السيارة الأولى: {VehicleRegistration}
-        تسجيل السيارة الثانية: {VehicleRegistration}
-
-        وصف الطرف الأول: {FirstPartyDescription}
-        وصف الطرف الثاني: {SecondPartyDescription}
-
-        بناءً على القوانين المرورية والمعلومات التالية التي تم استرجاعها:
-        {retrieved_context}
-        مع كتابة البند المستخرج منه الحاله
-
-        أريد منك أن تكتب تقريرًا كاملاً عن الحادث، متضمناً:
-        - وصف الحادث بالتفصيل بناءً على المعلومات المتاحة.
-        - تقييم نسبة الخطأ لكل طرف بناءً على البيانات المتوفرة (النسب المحتملة: [100%, 75%, 50%, 25%, 0%]).
-        - تقييم الأضرار المادية لكل سيارة.
-
-        يرجى عدم كتابة توصيات. وفي نهاية التقرير، اكتب أنه "قيد المراجعة".
-        """
+    # Define the system prompt for RAG processing
+    system_prompt = (
+        "أنت مساعد متخصص في تلخيص والإجابة على الأسئلة المتعلقة بقوانين المرور. "
+        "من المتوقع أن تحلل وتقيّم الخطأ في الحوادث المرورية بناءً على المعلومات المقدمة. "
+        "إذا كان الإدخال لا يتعلق بالوثيقة أو لا يمكنك تحديد الإجابة، فقم بالرد بـ 'ليس لدي أي فكرة'."
     )
 
-    # Call the OpenAI API to generate the accident report based on the prompt
-    response = openai.ChatCompletion.create(
-        model="gpt-4-turbo",
-        messages=[
-            {"role": "system", "content": "أنت مساعد في كتابة تقرير حادث مروري"},
-            {"role": "user", "content": prompt}
-        ],
-        max_tokens=1500,
-        temperature=0.1
+    prompt_template = ChatPromptTemplate.from_messages(
+        [
+            ("system", system_prompt),
+            ("human", "{input}"),
+        ]
     )
 
-    # Return the generated report
-    return response.choices[0].message['content'].strip()
+    # Create the RAG chain
+    question_answer_chain = StuffDocumentsChain(llm=llm, prompt=prompt_template)
+    rag_chain = RetrievalQA(combine_documents_chain=question_answer_chain, retriever=retriever)
 
-# Button to generate accident report
-if st.button("توليد تقرير الحادث"):
-    if accident_image_file and vehicle_reg_image1 and vehicle_reg_image2:
-        # Call RAG-based accident report generation
-        with st.spinner("Generating accident report..."):
-            try:
-                accident_report = generate_accident_report_with_fault(
-                    FirstPartyDescription,
-                    SecondPartyDescription,
-                    AccidentDescription,
-                    vehicle_reg_image1,
-                    vehicle_reg_image2,
-                    retriever
-                )
-                # Display the accident report
-                st.subheader("تقرير الحادث:")
-                st.write(accident_report)
-            except Exception as e:
-                st.error(f"Error generating report: {e}")
-    else:
-        st.error("الرجاء تحميل جميع الصور وملف قوانين المرور.")
+    # Function to generate the accident report
+    def generate_accident_report_with_fault(FirstPartyDescription, SecondPartyDescription, AccidentDescription, VehicleRegistration1, VehicleRegistration2, retriever):
+        # Retrieve relevant traffic laws or information using RAG
+        retrieved_context = rag_chain.run(AccidentDescription + FirstPartyDescription + SecondPartyDescription)
 
+        # Create the prompt dynamically by including the vehicle information and accident description
+        prompt = (
+            f"""
+            يوجد حادث مروري لسيارتين:
+            وصف الحادث بناءً على الصورة المقدمة: {AccidentDescription}
 
+            تسجيل السيارة الأولى:
+            {VehicleRegistration1}
 
+            تسجيل السيارة الثانية:
+            {VehicleRegistration2}
+
+            وصف الطرف الأول: {FirstPartyDescription}
+            وصف الطرف الثاني: {SecondPartyDescription}
+
+            بناءً على القوانين المرورية والمعلومات التالية التي تم استرجاعها:
+            {retrieved_context}
+            مع كتابة البند المستخرج منه الحالة.
+
+            أريد منك أن تكتب تقريرًا كاملاً عن الحادث، متضمنًا:
+            - وصف الحادث بالتفصيل بناءً على المعلومات المتاحة.
+            - تقييم نسبة الخطأ لكل طرف بناءً على البيانات المتوفرة (النسب المحتملة: [100%, 75%, 50%, 25%, 0%]).
+            - تقييم الأضرار المادية لكل سيارة.
+
+            يرجى عدم كتابة توصيات. وفي نهاية التقرير، اكتب أنه "قيد المراجعة".
+            """
+        )
+
+        # Call the OpenAI API to generate the accident report based on the prompt
+        response = openai.ChatCompletion.create(
+            model="gpt-4",
+            messages=[
+                {"role": "system", "content": "أنت مساعد في كتابة تقرير حادث مروري."},
+                {"role": "user", "content": prompt}
+            ],
+            max_tokens=1500,
+            temperature=0.1
+        )
+
+        # Return the generated report
+        return response.choices[0].message['content'].strip()
+
+    # Button to generate accident report
+    if st.button("توليد تقرير الحادث"):
+        if (
+            accident_image_file and
+            vehicle_reg_image1_file and
+            vehicle_reg_image2_file and
+            retriever is not None
+        ):
+            # Call RAG-based accident report generation
+            with st.spinner("جاري توليد تقرير الحادث..."):
+                try:
+                    accident_report = generate_accident_report_with_fault(
+                        FirstPartyDescription,
+                        SecondPartyDescription,
+                        AccidentDescription,
+                        formatted_text1,
+                        formatted_text2,
+                        retriever
+                    )
+                    # Display the accident report
+                    st.subheader("تقرير الحادث:")
+                    st.write(accident_report)
+                except Exception as e:
+                    st.error(f"حدث خطأ أثناء توليد التقرير: {e}")
+        else:
+            st.error("الرجاء تحميل جميع الصور.")
