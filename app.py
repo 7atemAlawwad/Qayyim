@@ -23,7 +23,7 @@ import pandas as pd
 # Set API keys
 openai.api_key = st.secrets["OPENAI_API_KEY"]
 google_creds = st.secrets["GOOGLE_APPLICATION_CREDENTIALS"]
-genai.configure(api_key=st.secrets["GOOGLE_APPLICATION_CREDENTIALS"])
+genai.configure(api_key=st.secrets["GOOGLE_GENERATIVE_AI_API_KEY"])
 
 # Save Google credentials to a temporary file for Vision API
 with open("/tmp/google-credentials.json", "w") as f:
