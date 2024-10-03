@@ -12,12 +12,13 @@ from langchain.chat_models import ChatOpenAI
 from langchain.vectorstores import Chroma
 from langchain.embeddings import OpenAIEmbeddings
 from langchain.text_splitter import RecursiveCharacterTextSplitter
-from langchain.chains import ConversationalRetrievalChain, RetrievalQA
-from langchain.prompts import ChatPromptTemplate
+from langchain.chains import ConversationalRetrievalChain
+from langchain.prompts.chat import ChatPromptTemplate
 import openai
 from io import BytesIO
 import streamlit as st
 import pandas as pd
+
 
 # Set API keys
 openai.api_key = st.secrets["OPENAI_API_KEY"]
