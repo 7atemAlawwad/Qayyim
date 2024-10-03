@@ -1,12 +1,9 @@
 requests
 google-generative-ai
-ipython
-google-colab
 Pillow
 google-cloud-vision
 langchain
 chromadb
-openai==0.28
+openai
 streamlit
-pypdf
-
+pandas
