@@ -1,41 +1,54 @@
+import os
+import json
 import requests
-import google.generativeai as genai
+import google.generativeai as palm
 import pathlib
 import textwrap
 import PIL.Image
-import os
-from google.cloud import vision
 import re
+import pandas as pd
+from io import BytesIO
+from google.cloud import vision
+from google.oauth2 import service_account
 from langchain.document_loaders import CSVLoader
 from langchain.llms import OpenAI
 from langchain.chat_models import ChatOpenAI
 from langchain.vectorstores import Chroma
 from langchain.embeddings import OpenAIEmbeddings
 from langchain.text_splitter import RecursiveCharacterTextSplitter
-from langchain.chains import ConversationalRetrievalChain
-from langchain.prompts.chat import ChatPromptTemplate
+from langchain.chains import ConversationalRetrievalChain, RetrievalQA
+from langchain.prompts import ChatPromptTemplate
 import openai
-from io import BytesIO
 import streamlit as st
-import pandas as pd
-import json
-
 
 # Set API keys
-openai.api_key = st.secrets["OPENAI_API_KEY"]
-google_creds = st.secrets["GOOGLE_APPLICATION_CREDENTIALS"]
-genai.configure(api_key=st.secrets["GOOGLE_GENERATIVE_AI_API_KEY"])
+openai.api_key = os.environ.get("OPENAI_API_KEY")
 
+# Retrieve the JSON string from the environment variable
+json_str = os.environ.get("GOOGLE_CREDENTIALS_JSON")
 
-# Save Google credentials to a temporary file for Vision API
-with open("/tmp/google-credentials.json", "w") as f:
-    json_content = json.loads(google_creds)
-    json.dump(json_content, f)
-os.environ["GOOGLE_APPLICATION_CREDENTIALS"] = "/tmp/google-credentials.json"
+# Check if the environment variable is set
+if not json_str:
+    st.error("Google credentials not found in environment variables.")
+    st.stop()  # Stop execution if credentials are not found
+else:
+    # Parse the JSON string into a dictionary
+    credentials_info = json.loads(json_str)
+    # Create credentials object
+    credentials = service_account.Credentials.from_service_account_info(credentials_info)
 
+# Retrieve PaLM API key from environment variables
+genai_api_key = os.environ.get("GENAI_API_KEY")
 
-# Initialize Google Cloud Vision Client
-client = vision.ImageAnnotatorClient()
+if not genai_api_key:
+    st.error("PaLM API key not found in environment variables.")
+    st.stop()  # Stop execution if credentials are not found
+else:
+    # Configure PaLM with the API key
+    palm.configure(api_key=genai_api_key)
+
+# Initialize Google Cloud Vision Client with credentials
+client = vision.ImageAnnotatorClient(credentials=credentials)
 
 # Streamlit app UI
 st.title("تقرير الحادث المروري")
@@ -60,20 +73,39 @@ if accident_image_file is not None:
     # Display the uploaded image
     st.image(img, caption="صورة الحادث", use_column_width=True)
 
+    # Convert the image to bytes
+    img_byte_arr = BytesIO()
+    img.save(img_byte_arr, format='PNG')
+    img_bytes = img_byte_arr.getvalue()
+
+    # Analyze the image using Google Vision API
+    def analyze_image(img_bytes):
+        image = vision.Image(content=img_bytes)
+        response = client.label_detection(image=image)
+        labels = response.label_annotations
+        descriptions = [label.description for label in labels]
+        return descriptions
+
+    # Get image descriptions
+    image_descriptions = analyze_image(img_bytes)
+    image_description_text = ', '.join(image_descriptions)
+
     # Define the prompt
-    prompt_arabic = """
-    انت محقق حوادث مرورية أو شرطي مرور. سيتم تزويدك بصورة؛ إذا وجدت بها حادث، قم بتحديد الطرف الأول على يسار الصورة والطرف الثاني على يمين الصورة.
+    prompt_arabic = f"""
+    أنت محقق حوادث مرورية أو شرطي مرور. بناءً على المعلومات التالية عن الصورة: {image_description_text}.
+    إذا وجدت بها حادث، قم بتحديد الطرف الأول على يسار الصورة والطرف الثاني على يمين الصورة.
     أريد منك وصفًا للحادث وتحديد الأضرار إن وجدت فقط.
     وإن لم يكن هناك حادث في الصورة، قم بكتابة "لم يتم العثور على حادث في الصورة".
     """
 
-    # Generate the response using the Gemini model
-    # Note: Ensure that the model supports image input if applicable
-    response = genai.generate_text(
+    # Generate the response using the PaLM API
+    response = palm.generate_text(
+        model="models/text-bison-001",
         prompt=prompt_arabic,
-        max_tokens=500,
-        temperature=0.2
+        temperature=0.2,
+        max_output_tokens=500,
     )
+
     AccidentDescription = response.result
 
     # Check and display the accident description
@@ -235,7 +267,7 @@ def format_vehicle_registration_text(detected_text):
 # Process vehicle registration images
 if vehicle_reg_image1_file and vehicle_reg_image2_file:
     # Detect and format text for both images
-    with st.spinner("Processing vehicle registration images..."):
+    with st.spinner("جاري معالجة صور تسجيل المركبات..."):
         detected_text1 = detect_text(vehicle_reg_image1_file)
         formatted_text1 = format_vehicle_registration_text(detected_text1)
 
@@ -372,21 +404,25 @@ else:
             vehicle_reg_image2_file and
             retriever is not None
         ):
-            # Call RAG-based accident report generation
-            with st.spinner("جاري توليد تقرير الحادث..."):
-                try:
-                    accident_report = generate_accident_report_with_fault(
-                        FirstPartyDescription,
-                        SecondPartyDescription,
-                        AccidentDescription,
-                        formatted_text1,
-                        formatted_text2,
-                        retriever
-                    )
-                    # Display the accident report
-                    st.subheader("تقرير الحادث:")
-                    st.write(accident_report)
-                except Exception as e:
-                    st.error(f"حدث خطأ أثناء توليد التقرير: {e}")
+            # Ensure AccidentDescription is defined
+            if 'AccidentDescription' not in locals():
+                st.error("يرجى تحميل صورة الحادث وانتظار التحليل.")
+            else:
+                # Call RAG-based accident report generation
+                with st.spinner("جاري توليد تقرير الحادث..."):
+                    try:
+                        accident_report = generate_accident_report_with_fault(
+                            FirstPartyDescription,
+                            SecondPartyDescription,
+                            AccidentDescription,
+                            formatted_text1,
+                            formatted_text2,
+                            retriever
+                        )
+                        # Display the accident report
+                        st.subheader("تقرير الحادث:")
+                        st.write(accident_report)
+                    except Exception as e:
+                        st.error(f"حدث خطأ أثناء توليد التقرير: {e}")
         else:
             st.error("الرجاء تحميل جميع الصور.")
